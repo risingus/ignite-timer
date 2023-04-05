@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Play } from 'phosphor-react'
+import { differenceInSeconds } from 'date-fns';
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod';
@@ -20,17 +22,102 @@ const newCycleFormValidationSchema = zod.object({
     .max(60, 'O ciclo precisa ser de no máximo 60 minutos.')
 })
 
+type NewCycleFormData = zod.infer<typeof newCycleFormValidationSchema>
+
+interface Cycle {
+  id: string
+  task: string
+  minutesAmount: number
+  startDate: Date
+}
+
 export function Home() {
-  const { register, handleSubmit, watch, formState } = useForm({
+  const [cycles, setCycles] = useState<Cycle[]>([])
+  const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
+  const [amountSecondsPassed, setAmountSecondsPassed] = useState<number>(0)
+
+  const activeCycle = useMemo(() => {
+
+    return (cycles.find((cycle) => cycle.id === activeCycleId) || null)
+
+  }, [cycles, activeCycleId])
+
+  const totalSeconds = useMemo(() => {
+    if (!activeCycle) return 0
+
+    return activeCycle.minutesAmount * 60
+
+  }, [activeCycle])
+
+  const currentSeconds = useMemo(() => {
+    if (!activeCycle) return 0
+
+    return totalSeconds - amountSecondsPassed
+
+  }, [activeCycle, amountSecondsPassed, totalSeconds])
+
+  const minutesAmount = useMemo(() => {
+
+    return Math.floor(currentSeconds / 60)
+
+  }, [currentSeconds])
+
+
+  const secondsAmount = useMemo(() => {
+
+    return currentSeconds % 60
+
+  }, [currentSeconds])
+
+  const minutes = useMemo(() => {
+    return String(minutesAmount).padStart(2, '0')
+  }, [minutesAmount])
+
+  const seconds = useMemo(() => {
+    return String(secondsAmount).padStart(2, '0')
+  }, [secondsAmount])
+
+
+  const { register, handleSubmit, watch, formState, reset } = useForm<NewCycleFormData>({
     resolver: zodResolver(newCycleFormValidationSchema),
+    defaultValues: {
+      task: '',
+      minutesAmount: 0,
+    }
   })
   const { errors } = formState
   const task = watch('task')
   const isSubmitDisabled = !task
 
-  function handleCreateNewCycle(form: any) {
-    console.log(form)
+  function handleCreateNewCycle(form: NewCycleFormData) {
+    const id = String(new Date().getTime())
+    const newCycle: Cycle = {
+      id,
+      task: form.task,
+      minutesAmount: form.minutesAmount,
+      startDate: new Date()
+    }
+
+    setCycles((prevState) => [
+      ...prevState,
+      newCycle
+    ])
+
+    setActiveCycleId(id)
+
+    reset()
   }
+
+
+
+  useEffect(() => {
+    if (!activeCycle) return;
+
+    setInterval(() => {
+      setAmountSecondsPassed(differenceInSeconds(new Date(), new Date(activeCycle.startDate)))
+    }, 1000)
+
+  }, [activeCycle])
 
   return (
     <HomeContainer>
@@ -62,11 +149,11 @@ export function Home() {
         </FormContainer>
 
         <CountdownContainer>
-          <span>0</span>
-          <span>0</span>
+          <span>{minutes[0]}</span>
+          <span>{minutes[1]}</span>
           <Separator>:</Separator>
-          <span>0</span>
-          <span>0</span>
+          <span>{seconds[0]}</span>
+          <span>{seconds[1]}</span>
         </CountdownContainer>
 
         <StartCountdownButton type="submit" disabled={isSubmitDisabled}>
